@@ -1,13 +1,23 @@
 import tensorflow as tf
 
-from tensorflow.keras.layers import Dropout
-from tensorflow.keras.layers import Conv2D
-from tensorflow.keras.layers import MaxPooling2D, GlobalAveragePooling2D 
-from tensorflow.keras.layers import Dense
-from tensorflow.keras.layers import BatchNormalization
+from tensorflow.keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, \
+    GlobalAveragePooling2D, BatchNormalization, Dropout
 
 
 #%% Model architectures
+
+def get_simple_model():
+    
+    inp = tf.keras.Input(shape=(3, 32, 32))
+    
+    x = Flatten()(inp)
+    x = Dense(512, activation=tf.nn.relu)(x)
+    x = Dense(512, activation=tf.nn.relu)(x)
+    output = Dense(10, activation='softmax')(x)
+
+    model = tf.keras.Model(inputs = [inp], outputs = [output])
+    
+    return model
 
 def get_model_large(activation, dropout):
 
@@ -50,7 +60,7 @@ def get_model_large(activation, dropout):
     
     output = Dense(10, activation='softmax')(x)
     
-    model = tf.keras.Model(inputs=[inp], outputs=[output])
+    model = tf.keras.Model(inputs = [inp], outputs = [output])
     
     return model
 
@@ -58,22 +68,20 @@ def get_model_large(activation, dropout):
 #%% Model classes with custom training
 
 class SemiSupervisedConsistencyModel(tf.keras.Model):
-    # def __init__(self):
-    #     super(GradModel, self).__init__()
-
     
-    def compile(self, optimizer, loss, metrics = [], run_eagerly = False):
+    def compile(self, p, optimizer, loss, metrics = [], run_eagerly = False):
         """
         Compile the model.
 
         Parameters
         ----------
+        p : parameters (an OmegaConf object)
         optimizer : a keras optimizer
             A keras optimizer. See tf.keras.optimizers. 
         loss : TF function
             A loss function to be used for supervised and unsupervised terms.
         metrics : a list of keras metrics, optional
-            Metrics to be computed for labeled and unlabeled adversarial or clean examples.
+            Metrics to be computed for labeled and unlabeled examples.
             See self.update_metrics to see how they are handled.
         run_eagerly : bool, optional
             If True, this Model's logic will not be wrapped in a tf.function;
@@ -86,6 +94,7 @@ class SemiSupervisedConsistencyModel(tf.keras.Model):
 
         """
         super(SemiSupervisedConsistencyModel, self).compile()
+        self.p = p
         self.optimizer = optimizer
         self.loss = loss
         self.loss_trackers = [tf.keras.metrics.Mean(name = 'loss'),
@@ -98,8 +107,8 @@ class SemiSupervisedConsistencyModel(tf.keras.Model):
         
     def compute_loss(self, data):
         """
-        Compute total VAT loss:
-            supervised + supervised adversarial + unsupervised adversarial.
+        Compute total loss:
+            supervised + unsupervised consistency loss.
 
         Parameters
         ----------
@@ -112,42 +121,44 @@ class SemiSupervisedConsistencyModel(tf.keras.Model):
             Total loss.
         loss_sup : scalar
             Supervised loss.
-        loss_vat : scalar
-            Adversarial loss (supervised + unsupervised).
-        pred : tensor
-            Predictions on clean examples (for computing metrics).
-        pred_adv : tensor
-            Predictions on adversarial examples (= 'adversarial predictions')
-            (for computing metrics).
-
+        loss_usup : scalar
+            Unsupervised loss.
+        pair_sup : a tuple of tensors
+            Ground truth labels and predictions on labeled examples.
+        pair_usup : a tuple of tensors
+            Predictions on two differently transformed labeled and unlabeled examples.
         """
         
         x, y, labeled = data
-        n_labeled = tf.math.count_nonzero(labeled) / 2
-        n = tf.shape(x)[0] / 2
         
-        print(x.shape, y.shape)
+        # number of unique labeled and labeled+unlabeled images
+        n_labeled = tf.cast(tf.math.count_nonzero(labeled), tf.int32) // 2
+        n = tf.shape(x)[0] // 2
 
-        # compute predictions on clean exaples
-        pred = self([x])
+        # compute predictions on all examples
+        pred = self(x)
         
-        yl = tf.concat((pred[:n_labeled, ...], pred[:n_labeled, ...]), axis = 0)
+        # separate labeled images from the rest
+        yl = tf.concat((y[:n_labeled, ...], y[:n_labeled, ...]), axis = 0)
         predl = tf.concat((pred[:n_labeled, ...], pred[n:(n+n_labeled), ...]), axis = 0)
+        
+        # separate differently transformed 
         pred1, pred2 = pred[:n, ...], pred[n:, ...]
         
         # supervised loss
         loss_sup = self.loss(yl, predl)       
 
+        # unsupervised loss made symmetric (e.g. KL divergence is not symmetric)
         loss_usup = (self.loss(pred1, pred2) + self.loss(pred2, pred1)) / 2
         
-        # total loss
-        loss_value = loss_sup + loss_usup
+        # total loss: supervised + weight * unsupervised consistency
+        loss_value = loss_sup + self.p.alpha * loss_usup
         
         return loss_value, loss_sup, loss_usup, (yl, predl), (pred1, pred2)
     
     def update_metrics(self, data, loss_values, pair_sup, pair_usup):
         """
-        Updates loss trackers and metrics so that they return the current moving average.
+        Updates loss trackers and metrics so that they return the current moving averages.
 
         """
 
@@ -199,7 +210,7 @@ class SemiSupervisedConsistencyModel(tf.keras.Model):
         
         self.optimizer.apply_gradients(zip(grads, self.trainable_variables))        
         
-        metric_values = self.update_metrics([loss_value, loss_sup, loss_usup], pair_sup, pair_usup)
+        metric_values = self.update_metrics(data, [loss_value, loss_sup, loss_usup], pair_sup, pair_usup)
 
         return metric_values
         
@@ -212,7 +223,7 @@ class SemiSupervisedConsistencyModel(tf.keras.Model):
 
         loss_value, loss_sup, loss_usup, pair_sup, pair_usup = self.compute_loss(data)
         
-        metric_values = self.update_metrics([loss_value, loss_sup, loss_usup], pair_sup, pair_usup)
+        metric_values = self.update_metrics(data, [loss_value, loss_sup, loss_usup], pair_sup, pair_usup)
         
         return metric_values
 
