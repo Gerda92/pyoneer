@@ -19,51 +19,54 @@ def get_simple_model():
     
     return model
 
-def get_model_large(activation, dropout):
+def get_model_conv_small(activation, dropout):
+    
+    # CPU only allows 'channels_last' order
+    data_format = 'channels_last' if not tf.test.is_gpu_available() else 'channels_first'
+    bn_axis = 3 if data_format == 'channels_last' else 1    # channel axis for batch normalization
+    
+    # parameters for convolutional layers:
+    conv_layer_params = {
+        'kernel_initializer': 'he_uniform',
+        'padding': 'same',
+        'data_format': data_format
+    }
 
     if activation == 'LeakyReLU':
-        activation = tf.keras.layers.LeakyReLU(alpha = 0.1)
+        conv_layer_params['activation'] = tf.keras.layers.LeakyReLU(alpha = 0.1)
     else:
-        activation = tf.keras.layers.ReLU()
+        conv_layer_params['activation'] = tf.keras.layers.ReLU()
         
-    inp = tf.keras.Input(shape=(3, 32, 32))
-    x = Conv2D(96, (3, 3), activation=activation, kernel_initializer='he_uniform', padding='same', input_shape=(32, 32, 3))(inp)
-    x = BatchNormalization()(x)
-    x = Conv2D(96, (3, 3), activation=activation, kernel_initializer='he_uniform', padding='same')(x)
-    x = BatchNormalization()(x)
-    x = Conv2D(96, (3, 3), activation=activation, kernel_initializer='he_uniform', padding='same')(x)
-    x = BatchNormalization()(x)
+    inp = tf.keras.Input(shape = (3, 32, 32))
+    x = tf.keras.layers.Lambda(lambda x: tf.transpose(x, [0, 2, 3, 1]))(inp)    # transform to 'channel_last'
     
-    x = MaxPooling2D(pool_size=(2, 2), strides=(2,2))(x)
+    for i in range(3):
+        x = Conv2D(96, (3, 3), **conv_layer_params)(x)
+        x = BatchNormalization(axis = bn_axis)(x)
     
+    x = MaxPooling2D(pool_size = (2, 2), data_format = data_format)(x)    
     x = Dropout(dropout)(x)
-    
-    x = Conv2D(192, (3, 3), activation=activation, kernel_initializer='he_uniform', padding='same')(x)
-    x = BatchNormalization()(x)
-    x = Conv2D(192, (3, 3), activation=activation, kernel_initializer='he_uniform', padding='same')(x)
-    x = BatchNormalization()(x)
-    x = Conv2D(192, (3, 3), activation=activation, kernel_initializer='he_uniform', padding='same')(x)
-    x = BatchNormalization()(x)
-    
-    x = MaxPooling2D(pool_size=(2, 2), strides=(2,2))(x)
-    
+
+    for i in range(3):
+        x = Conv2D(192, (3, 3), **conv_layer_params)(x)
+        x = BatchNormalization(axis = bn_axis)(x)
+
+    x = MaxPooling2D(pool_size = (2, 2), data_format = data_format)(x)    
     x = Dropout(dropout)(x)
+
+    x = Conv2D(192, (3, 3), **conv_layer_params)(x)
+    x = BatchNormalization(axis = bn_axis)(x)
+    for i in range(2):
+        x = Conv2D(192, (1, 1), **conv_layer_params)(x)
+        x = BatchNormalization(axis = bn_axis)(x)
     
-    x = Conv2D(192, (3, 3), activation=activation, kernel_initializer='he_uniform', padding='same')(x)
-    x = BatchNormalization()(x)
-    x = Conv2D(192, (1, 1), activation=activation, kernel_initializer='he_uniform', padding='same')(x)
-    x = BatchNormalization()(x)
-    x = Conv2D(192, (1, 1), activation=activation, kernel_initializer='he_uniform', padding='same')(x)
-    x = BatchNormalization()(x)
-    
-    x = GlobalAveragePooling2D()(x) 
+    x = GlobalAveragePooling2D(data_format = data_format)(x) 
     
     output = Dense(10, activation='softmax')(x)
     
     model = tf.keras.Model(inputs = [inp], outputs = [output])
     
     return model
-
 
 #%% Model classes with custom training
 
