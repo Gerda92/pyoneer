@@ -38,7 +38,11 @@ def get_model_conv_small(activation, dropout):
         conv_layer_params['activation'] = tf.keras.layers.ReLU()
         
     inp = tf.keras.Input(shape = (3, 32, 32))
-    x = tf.keras.layers.Lambda(lambda x: tf.transpose(x, [0, 2, 3, 1]))(inp)    # transform to 'channel_last'
+
+    if data_format == 'channels_last':
+        x = tf.keras.layers.Lambda(lambda x: tf.transpose(x, [0, 2, 3, 1]))(inp)    # transform to 'channel_last'
+    else:
+        x = inp
     
     for i in range(3):
         x = Conv2D(96, (3, 3), **conv_layer_params)(x)

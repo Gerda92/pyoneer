@@ -6,4 +6,5 @@ import numpy as np
 
 def transform_random_noise(image, sigma):
     
-    return image + np.random.normal(scale = sigma, size = image.shape)
+    return np.clip(image + np.random.normal(scale = sigma, size = image.shape), \
+                   np.min(image), np.max(image))

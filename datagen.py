@@ -78,7 +78,7 @@ class SimpleSequence(tf.keras.utils.Sequence):
         batch_labeled = np.concatenate((batch_labeled, batch_labeled), axis = 0)
         
         # return training samples, labels, indicators of whether images are labeled
-        return batch_x[sortd, ...], batch_y[sortd, ...], batch_labeled[sortd]
+        return batch_x, batch_y, batch_labeled
     
     def reset(self):
         self.indexes = np.arange(len(self.IDs), dtype = int)

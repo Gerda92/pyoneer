@@ -1,14 +1,15 @@
 # Model training and evaluation
 
-from datagen import SimpleSequence
-import func
-import models
-from omegaconf import OmegaConf
-import tensorflow as tf
-import numpy as np
-import os
-import time
+import os, time
 
+import numpy as np
+import pandas as pd
+from omegaconf import OmegaConf
+
+import tensorflow as tf
+
+import func, models
+from datagen import SimpleSequence
 
 # comment this line out to use gpu:
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -100,10 +101,17 @@ model.compile(optimizer = opt, loss = getattr(func, p.loss),
 
 start = time.time()
 
+exp_folder = os.path.join(p.results_path, p.exp_name)
+if not os.path.exists(exp_folder):
+    os.makedirs(exp_folder)
+
+csv_logger = tf.keras.callbacks.CSVLogger(os.path.join(exp_folder, 'training.csv'), separator = ",", append = False)
+
 history = model.fit(x = train_gen,
                     epochs = p.epochs,
                     verbose = 1,
-                    validation_data = val_gen)
+                    validation_data = val_gen,
+                    callbacks = [csv_logger])
 
 print('Training time: %.1f seconds.' % (time.time() - start))
 
@@ -111,5 +119,10 @@ print('Training time: %.1f seconds.' % (time.time() - start))
 
 metric_values = model.evaluate(test_gen)
 
+test_results = {'metric': model.metrics_names, 'value': metric_values}
+pd.DataFrame(data = test_results).to_csv(os.path.join(exp_folder, 'test.csv'), index = False)
+
+
+print('\nTest results:')
 for metric_name, metric_value in zip(model.metrics_names, metric_values):
     print('%s: %.3f' % (metric_name, metric_value))

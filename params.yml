@@ -1,5 +1,8 @@
 # Experiment parameters
 
+results_path: '/home/gerda/Desktop/results'
+exp_name: 'ssl test'
+
 data_split: cifar10_default
 
 num_classes: 10
@@ -8,7 +11,7 @@ num_classes: 10
 transform:
     name: transform_random_noise
     params:
-        sigma: 0.1
+        sigma: 0.01
 
 # network architecture
 arch:
