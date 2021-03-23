@@ -153,7 +153,9 @@ class SemiSupervisedConsistencyModel(tf.keras.Model):
         pred1, pred2 = pred[:n, ...], pred[n:, ...]
         
         # supervised loss
-        loss_sup = self.loss(yl, predl)       
+        loss_sup = tf.cond(tf.math.equal(tf.size(yl), 0),
+                           lambda: 0.0,
+                           lambda: self.loss(yl, predl))     
 
         # unsupervised loss made symmetric (e.g. KL divergence is not symmetric)
         loss_usup = (self.loss(pred1, pred2) + self.loss(pred2, pred1)) / 2

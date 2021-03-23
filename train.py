@@ -18,7 +18,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 p = OmegaConf.load('params.yml')
 
-run_eagerly = True     # set to true to debug model training
+run_eagerly = False     # set to true to debug model training
 
 # %% Data split parameters
 
