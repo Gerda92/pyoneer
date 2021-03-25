@@ -14,6 +14,9 @@ from datagen import SimpleSequence
 # comment this line out to use gpu:
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
+# sets the dimension order to 'channel_first', which the rest of the code assumes
+tf.keras.backend.set_image_data_format("channels_first")
+
 # %% Load and specify parameters
 
 p = OmegaConf.load('params.yml')
