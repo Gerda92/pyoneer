@@ -1,7 +1,16 @@
+
+import os
+
+from collections.abc import Iterable
+
+from omegaconf import OmegaConf
+
 import tensorflow as tf
 
 from tensorflow.keras.layers import Conv2D, Dense, Flatten, MaxPooling2D, \
     GlobalAveragePooling2D, BatchNormalization, Dropout
+    
+import func, improc
 
 
 #%% Model architectures
@@ -72,11 +81,23 @@ def get_model_conv_small(activation, dropout):
     
     return model
 
+
 #%% Model classes with custom training
 
 class SemiSupervisedConsistencyModel(tf.keras.Model):
     
-    def compile(self, p, optimizer, loss, metrics = [], run_eagerly = False):
+    def __init__(self, p, *args, **kwargs):
+        super(SemiSupervisedConsistencyModel, self).__init__(*args, **kwargs)
+        
+        # if p.transform_output is specified, fill in missing values with values from p.transform
+        if p.transform_output:
+            p.transform_output = OmegaConf.merge(p.transform,
+                                                 {} if p.transform_output == True else p.transform_output)
+        
+        self.p = p
+        
+    
+    def compile(self, optimizer, loss, metrics = [], run_eagerly = False):
         """
         Compile the model.
 
@@ -101,7 +122,7 @@ class SemiSupervisedConsistencyModel(tf.keras.Model):
 
         """
         super(SemiSupervisedConsistencyModel, self).compile()
-        self.p = p
+        
         self.optimizer = optimizer
         self.loss = loss
         self.loss_trackers = [tf.keras.metrics.Mean(name = 'loss'),
@@ -136,22 +157,52 @@ class SemiSupervisedConsistencyModel(tf.keras.Model):
             Predictions on two differently transformed labeled and unlabeled examples.
         """
         
-        x, y, labeled = data
+        inputs, y, labeled = data
         
-        # number of unique labeled and labeled+unlabeled images
-        n_labeled = tf.cast(tf.math.count_nonzero(labeled), tf.int32) // 2
-        n = tf.shape(x)[0] // 2
+        x = inputs[0]
+        transform_parameters = inputs[1:]
+        
+        # number of labeled and labeled+unlabeled images
+        n_labeled = tf.cast(tf.math.count_nonzero(labeled), tf.int32)
+        n = tf.shape(x)[0]
+        
+        # get a transform function
+        transform = getattr(func, 'get_batch_transform_' +  self.p.transform.apply_func) \
+                (*transform_parameters, **self.p.transform.params_apply)
+                
+        t_x = transform(x)                  # transform input images
+        x = tf.concat((x, t_x), axis = 0)   # form a batch to feed to the network
+
+        # if network outputs and labels also need to be transformed (as in the segmentation case):
+        if self.p.transform_output:        
+            transform_output = getattr(func, 'get_batch_transform_' +  self.p.transform_output.apply_func) \
+                (*transform_parameters, **self.p.transform_output.params_apply)
+            t_y = transform_output(y)           # transform GT labels
+            y = tf.concat((y, t_y), axis = 0)   # form a batch corresponding to x
+        else:
+            y = tf.concat((y, y), axis = 0)
+        
+        # save original and transformed inputs when in the debugging mode:
+        if self.p.debug and self.run_eagerly:            
+            improc.plot_batch_sample(self.p, x.numpy(), y.numpy(),
+                                     os.path.join(self.p.results_path, self.p.exp_name, 'debug/model_input.png'))
+            improc.plot_batch_sample(self.p, x[n:, ...].numpy(), y[n:, ...].numpy(),
+                                     os.path.join(self.p.results_path, self.p.exp_name, 'debug/model_transformed_input.png'))
 
         # compute predictions on all examples
         pred = self(x)
-        
-        # separate labeled images from the rest
-        yl = tf.concat((y[:n_labeled, ...], y[:n_labeled, ...]), axis = 0)
-        predl = tf.concat((pred[:n_labeled, ...], pred[n:(n+n_labeled), ...]), axis = 0)
-        
-        # separate differently transformed 
+
+        # separate differently transformed images
         pred1, pred2 = pred[:n, ...], pred[n:, ...]
         
+        if self.p.transform_output:
+            # transform the first half of the predictions to align it with the second half:
+            pred1 = transform_output(pred1)
+        
+        # separate labeled images from the rest
+        yl = tf.concat((y[:n_labeled, ...], y[n:(n+n_labeled), ...]), axis = 0)
+        predl = tf.concat((pred1[:n_labeled, ...], pred2[:n_labeled, ...]), axis = 0)
+
         # supervised loss
         loss_sup = tf.cond(tf.math.equal(tf.size(yl), 0),
                            lambda: 0.0,

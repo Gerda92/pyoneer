@@ -10,11 +10,23 @@ from scipy.ndimage import zoom
 
 #%% Functions used in the SSL method for transforming
 
-def transform_random_noise(image, sigma):
+def get_random_gaussian_noise(shape, sigma):
     
-    return np.clip(image + np.random.normal(scale = sigma, size = image.shape), \
-                   np.min(image), np.max(image))
+    return np.random.normal(scale = sigma, size = shape)
         
+def get_random_shift_displacement_map(shape, max_shift):
+    
+    batch_size = shape[0]
+    image_size = shape[-2:]
+    
+    # generating random 2D shift vectors:
+    shift = np.random.randint(-max_shift, max_shift, size = (batch_size, 2))
+    
+    # computing displacement vectors:
+    displacement = np.tile(np.reshape(shift, (batch_size, 2, 1, 1)), \
+                           [1, 1] + list(image_size))
+        
+    return displacement
 
 #%% Functions for loading and preprocessing images and segmentations
 

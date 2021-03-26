@@ -19,9 +19,11 @@ tf.keras.backend.set_image_data_format("channels_first")
 
 # %% Load and specify parameters
 
-p = OmegaConf.load('params.yml')
+params_file = 'params.yml'
 
-run_eagerly = False     # set to true to debug model training
+p = OmegaConf.load(params_file)
+
+run_eagerly = True    # set to true to debug model training
 
 # %% Data split parameters
 
@@ -95,10 +97,10 @@ metrics = [getattr(tf.keras.metrics, metric_class)(name=('%s_%s' % (metric_type,
            for metric_class, metric_name in zip(['CategoricalAccuracy'], ['acc'])]
 
 
-model = models.SemiSupervisedConsistencyModel(inputs=[model_arch.input],
-                                              outputs=[model_arch.output])
+model = models.SemiSupervisedConsistencyModel(p, inputs = [model_arch.input],
+                                              outputs = [model_arch.output])
 model.compile(optimizer = opt, loss = getattr(func, p.loss),
-              metrics = metrics, run_eagerly = run_eagerly, p = p)
+              metrics = metrics, run_eagerly = run_eagerly)
 
 # %% Train the model
 
@@ -107,6 +109,8 @@ start = time.time()
 exp_folder = os.path.join(p.results_path, p.exp_name)
 if not os.path.exists(exp_folder):
     os.makedirs(exp_folder)
+if not os.path.exists(os.path.join(exp_folder, 'debug')):
+    os.makedirs(os.path.join(exp_folder, 'debug'))
 
 csv_logger = tf.keras.callbacks.CSVLogger(os.path.join(exp_folder, 'training.csv'), separator = ",", append = False)
 

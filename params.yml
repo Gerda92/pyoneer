@@ -1,5 +1,7 @@
 # Experiment parameters
 
+debug: True
+
 results_path: '/home/gerda/Desktop/results'
 exp_name: 'ssl test'
 
@@ -9,9 +11,23 @@ num_classes: 10
 
 # transform parameters
 transform:
-    name: transform_random_noise
-    params:
-        sigma: 0.01
+    gen_func: random_shift_displacement_map
+    params_gen:
+        max_shift: 10
+    apply_func: displacement_map
+    params_apply:
+        interpolation_order: 3
+
+# should network outputs and labels also be transformed and how:
+transform_output: False
+
+# this will apply the exact same transform to network outputs and labels as specified in 'transform'
+# transform_output: True
+
+# this will apply the same transform but with different interpolation_order:
+# transform_output: 
+#     params_apply:
+#         interpolation_order: 0
 
 # network architecture
 arch:

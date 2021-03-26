@@ -1,0 +1,46 @@
+# Experiment parameters
+
+debug: True
+
+results_path: '/home/gerda/Desktop/results'
+exp_name: 'ssl test'
+
+data_split: cifar10_default
+
+num_classes: 10
+
+# transform parameters
+transform:
+    gen_func: random_gaussian_noise
+    params_gen:
+        sigma: 0.1
+    apply_func: add_noise
+    params_apply: {}
+
+# specify transform parameters for network outputs and labels:
+# (in this example, transform_output: False would also work;
+# this is to test if specifying transform_output works)
+transform_output:
+    apply_func: identity
+    params_apply: {}
+
+# network architecture
+arch:
+    name: 'model_conv_small'
+    params:
+        activation: 'LeakyReLU'
+        dropout: 0.5
+
+optimizer:
+    name: Adam
+    params:
+        learning_rate: 0.001
+
+# loss function
+loss: kl_divergence
+alpha: 0
+
+# training
+batch_size: 128
+epochs: 120
+# epochs: 120 # should be enough to converge

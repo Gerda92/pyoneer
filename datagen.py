@@ -67,18 +67,13 @@ class SimpleSequence(tf.keras.utils.Sequence):
         batch_y = batch_y[sortd, ...]
         batch_labeled = batch_labeled[sortd, ...]
         
-        # transform
-        batch_x_transformed = getattr(improc, self.p.transform.name)(batch_x, \
-                                                                     **self.p.transform.params)
+        # generate transform parameters (e.g., noise or displacement map)
+        # using a function given by p.transform.gen_func parameter
+        transform_parameters = getattr(improc, 'get_' + self.p.transform.gen_func) \
+            (batch_x.shape, **self.p.transform.params_gen)
         
-        # the first and the second half of the batch are the same images,
-        # but transformed differently
-        batch_x = np.concatenate((batch_x, batch_x_transformed), axis = 0)
-        batch_y = np.concatenate((batch_y, batch_y), axis = 0)
-        batch_labeled = np.concatenate((batch_labeled, batch_labeled), axis = 0)
-        
-        # return training samples, labels, indicators of whether images are labeled
-        return batch_x, batch_y, batch_labeled
+        # return training samples + transform parameters, labels, indicators of whether images are labeled
+        return [batch_x, transform_parameters], batch_y, batch_labeled
     
     def reset(self):
         self.indexes = np.arange(len(self.IDs), dtype = int)
